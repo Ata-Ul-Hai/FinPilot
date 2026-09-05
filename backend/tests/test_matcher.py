@@ -1,4 +1,5 @@
-from backend.app.matcher import MatchPolicy, match_transactions
+from backend.app.matcher import match_transactions
+from backend.app.policies import Policy
 
 
 def transaction(
@@ -6,14 +7,14 @@ def transaction(
     source: str,
     *,
     amount: float = -100.0,
-    date: str = "2026-08-31",
+    posted: str = "2026-08-31",
     counterparty: str = "Acme Freight",
     reference: str = "INV-4471",
 ) -> dict[str, object]:
     return {
         "id": transaction_id,
         "source": source,
-        "date": date,
+        "date": posted,
         "amount": amount,
         "currency": "USD",
         "counterparty": counterparty,
@@ -22,100 +23,102 @@ def transaction(
     }
 
 
-def test_exact_match_has_scored_traceable_evidence() -> None:
-    decisions = match_transactions(
-        [transaction("BNK-0007", "bank")], [transaction("GL-0031", "gl")]
+def test_exact_requires_reference_amount_and_date_within_one_day() -> None:
+    bank = transaction("BNK-1", "bank", posted="2026-08-31")
+    gl = transaction(
+        "GL-1",
+        "gl",
+        posted="2026-09-01",
+        counterparty="Counterparty spelling does not gate exact",
     )
 
-    assert decisions[0]["status"] == "matched"
-    assert decisions[0]["method"] == "exact"
-    assert decisions[0]["confidence"] == 1.0
-    assert decisions[0]["evidence"]["field_scores"] == {
-        "amount": 1.0,
-        "date_proximity": 1.0,
-        "counterparty": 1.0,
-        "reference": 1.0,
-    }
-    assert decisions[0]["evidence"]["source_rows"]["bank"] == {"id": "BNK-0007"}
+    record = match_transactions([bank], [gl], Policy())[0]
+
+    assert record["pair"] == ["BNK-1", "GL-1"]
+    assert record["method"] == "exact"
+    assert record["confidence"] == 1.0
+    assert record["evidence"]["reasons"]
 
 
-def test_strict_policy_flags_counterparty_typo_with_counterfactual() -> None:
-    bank = transaction("BNK-0007", "bank", reference="")
-    gl = transaction("GL-0031", "gl", counterparty="ACM FRT", reference="")
+def test_reference_rules_classify_amount_and_timing_exceptions() -> None:
+    bank = [
+        transaction("BNK-1", "bank", amount=-100.0, reference="INV-AMOUNT"),
+        transaction("BNK-2", "bank", posted="2026-08-31", reference="INV-TIME"),
+    ]
+    gl = [
+        transaction("GL-1", "gl", amount=-99.97, reference="INV-AMOUNT"),
+        transaction("GL-2", "gl", posted="2026-09-03", reference="INV-TIME"),
+    ]
 
-    decision = match_transactions([bank], [gl], MatchPolicy(fuzzy_threshold=0.80))[0]
+    records = match_transactions(bank, gl, Policy())
 
-    assert decision["status"] == "exception"
-    assert decision["method"] == "fuzzy"
-    assert decision["pair"] == ["BNK-0007", "GL-0031"]
-    assert decision["evidence"]["field_scores"]["counterparty"] < 0.80
-    assert "counterparty" in decision["evidence"]["counterfactual"]
-
-
-def test_lower_threshold_turns_review_candidate_into_fuzzy_match() -> None:
-    bank = transaction("BNK-0007", "bank", reference="")
-    gl = transaction("GL-0031", "gl", counterparty="ACM FRT", reference="")
-
-    decision = match_transactions([bank], [gl], MatchPolicy(fuzzy_threshold=0.60))[0]
-
-    assert decision["status"] == "matched"
-    assert decision["method"] == "fuzzy"
+    assert [record["kind"] for record in records] == [
+        "AMOUNT_MISMATCH",
+        "TIMING_DIFF",
+    ]
+    assert all(record["evidence"]["counterfactual"] for record in records)
 
 
-def test_blank_identifiers_are_not_exact_match_evidence() -> None:
-    bank = transaction("BNK-1", "bank", counterparty="", reference="")
-    gl = transaction("GL-1", "gl", counterparty="", reference="")
-
-    decision = match_transactions([bank], [gl])[0]
-
-    assert decision["status"] == "exception"
-    assert decision["evidence"]["field_scores"]["counterparty"] == 0.0
-    assert decision["evidence"]["field_scores"]["reference"] == 0.0
-
-
-def test_rule_match_obeys_amount_and_date_policy() -> None:
-    bank = transaction("BNK-1", "bank", date="2026-08-31", amount=100.0)
-    gl = transaction("GL-1", "gl", date="2026-09-02", amount=100.03)
-
-    strict = match_transactions([bank], [gl], MatchPolicy())
-    permissive = match_transactions(
-        [bank], [gl], MatchPolicy(amount_tolerance=0.05, date_grace_days=3)
-    )
-
-    assert strict[0]["status"] == "exception"
-    assert "amount delta" in strict[0]["evidence"]["counterfactual"]
-    assert permissive[0]["status"] == "matched"
-    assert permissive[0]["method"] == "rule"
-
-
-def test_ambiguous_duplicates_are_not_auto_matched() -> None:
+def test_duplicate_retains_all_candidates_and_ambiguity_evidence() -> None:
     bank = [transaction("BNK-1", "bank")]
     gl = [transaction("GL-2", "gl"), transaction("GL-1", "gl")]
 
-    decisions = match_transactions(bank, gl)
+    record = match_transactions(bank, gl, Policy())[0]
 
-    assert len(decisions) == 1
-    assert decisions[0]["pair"] is None
-    assert decisions[0]["items"] == ["BNK-1", "GL-1", "GL-2"]
-    assert decisions[0]["status"] == "exception"
-    assert decisions[0]["method"] == "exact"
+    assert record["kind"] == "DUPLICATE"
+    assert record["items"] == ["BNK-1", "GL-1", "GL-2"]
     assert (
-        "multiple equally valid exact GL candidates"
-        in decisions[0]["evidence"]["counterfactual"]
+        "multiple equally valid GL candidates" in record["evidence"]["counterfactual"]
     )
-    assert [row["id"] for row in decisions[0]["evidence"]["candidate_rows"]] == [
+    assert [item["id"] for item in record["evidence"]["candidate_rows"]] == [
         "GL-1",
         "GL-2",
     ]
-    assert not any(item["status"] == "matched" for item in decisions)
 
 
-def test_every_decision_has_evidence_even_for_orphans() -> None:
-    decisions = match_transactions(
-        [transaction("BNK-1", "bank")],
-        [transaction("GL-1", "gl", amount=999), transaction("GL-2", "gl", amount=777)],
+def test_fuzzy_threshold_matches_or_escalates_counterparty() -> None:
+    bank = transaction("BNK-1", "bank", reference="")
+    gl = transaction("GL-1", "gl", counterparty="Acme Freigt", reference="")
+
+    matched = match_transactions([bank], [gl], Policy(fuzzy_threshold=0.80))[0]
+    escalated = match_transactions([bank], [gl], Policy(fuzzy_threshold=0.95))[0]
+
+    assert matched["status"] == "matched"
+    assert matched["method"] == "fuzzy"
+    assert 0 <= matched["confidence"] <= 1
+    assert escalated["kind"] == "COUNTERPARTY_MISMATCH"
+    assert "below policy" in escalated["evidence"]["counterfactual"]
+
+
+def test_no_safe_candidate_is_missing_entry() -> None:
+    record = match_transactions(
+        [transaction("BNK-1", "bank", amount=-100.0)],
+        [transaction("GL-1", "gl", amount=-999.0, reference="UNRELATED")],
+        Policy(),
+    )[0]
+
+    assert record["kind"] == "MISSING_ENTRY"
+    assert record["items"] == ["BNK-1"]
+    assert record["evidence"]["source_rows"]["bank"] == {"id": "BNK-1"}
+
+
+def test_every_output_record_has_complete_evidence() -> None:
+    records = match_transactions(
+        [
+            transaction("BNK-1", "bank", reference="INV-1"),
+            transaction("BNK-2", "bank", amount=-200.0, reference=""),
+        ],
+        [transaction("GL-1", "gl", reference="INV-1")],
+        Policy(),
     )
 
-    assert decisions
-    assert all(decision.get("evidence") for decision in decisions)
-    assert all(decision["evidence"].get("counterfactual") for decision in decisions)
+    for record in records:
+        evidence = record["evidence"]
+        assert set(evidence["field_scores"]) == {
+            "amount",
+            "date_proximity",
+            "counterparty",
+            "reference",
+        }
+        assert evidence["reasons"]
+        assert evidence["counterfactual"]

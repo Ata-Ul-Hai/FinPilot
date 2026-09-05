@@ -1,8 +1,10 @@
 import json
+from collections import Counter
 from pathlib import Path
 
 from backend.app.ingest import ingest_pair
-from backend.app.matcher import MatchPolicy, match_transactions
+from backend.app.matcher import match_transactions
+from backend.app.policies import load_policy
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -12,77 +14,73 @@ def _labels() -> list[dict[str, object]]:
         return [json.loads(line) for line in stream]
 
 
-def _decision_by_bank_id(
-    decisions: list[dict[str, object]],
-) -> dict[str, dict[str, object]]:
-    result: dict[str, dict[str, object]] = {}
-    for decision in decisions:
-        pair = decision.get("pair")
-        items = decision.get("items", [])
+def _by_bank_id(records: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+    indexed: dict[str, dict[str, object]] = {}
+    for record in records:
+        pair = record.get("pair")
+        items = record.get("items", [])
         bank_id = (
             pair[0]
             if pair
             else next((item for item in items if str(item).startswith("BNK-")), None)
         )
         if bank_id:
-            result[str(bank_id)] = decision
-    return result
+            indexed[str(bank_id)] = record
+    return indexed
 
 
-def test_frozen_sample_acceptance_and_labeled_review_evidence() -> None:
+def test_frozen_labels_match_sample_results_exactly() -> None:
     bank, gl = ingest_pair(
         ROOT / "data" / "sample" / "bank.csv",
         ROOT / "data" / "sample" / "gl.csv",
     )
-    decisions = match_transactions(bank, gl, MatchPolicy(fuzzy_threshold=0.80))
-    decisions_by_bank = _decision_by_bank_id(decisions)
+    records = match_transactions(bank, gl, load_policy())
+    records_by_bank = _by_bank_id(records)
     labels = _labels()
 
-    assert len(bank) == 79
-    assert len(gl) == 79
-    assert (
-        sum(
-            decision["status"] == "matched" and decision["method"] == "exact"
-            for decision in decisions
-        )
-        >= 61
+    assert len(records_by_bank) == len(labels) == 79
+    expected_counts = Counter(str(label["truth"]) for label in labels)
+    actual_counts = Counter(
+        "matched" if record.get("status") == "matched" else str(record["kind"])
+        for record in records
     )
-    assert all(decision.get("evidence") for decision in decisions)
+    assert (
+        expected_counts
+        == actual_counts
+        == {
+            "matched": 61,
+            "TIMING_DIFF": 4,
+            "DUPLICATE": 3,
+            "MISSING_ENTRY": 3,
+            "AMOUNT_MISMATCH": 4,
+            "COUNTERPARTY_MISMATCH": 4,
+        }
+    )
 
-    typo_labels = [
-        label for label in labels if label["truth"] == "COUNTERPARTY_MISMATCH"
-    ]
-    assert len(typo_labels) == 4
-    for label in typo_labels:
-        decision = decisions_by_bank[str(label["bank_id"])]
-        assert decision["pair"] == [label["bank_id"], label["gl_id"]]
-        assert decision["status"] == "exception"
-        assert decision["evidence"]["field_scores"]["counterparty"] < 0.80
-        assert "counterparty" in decision["evidence"]["counterfactual"]
-        assert decision["evidence"]["source_rows"]
+    for label in labels:
+        record = records_by_bank[str(label["bank_id"])]
+        assert record["evidence"]["reasons"]
+        assert record["evidence"]["counterfactual"]
+        assert record["evidence"]["source_rows"]
+        if label["truth"] == "matched":
+            assert record["pair"] == [label["bank_id"], label["gl_id"]]
+            assert record["method"] == "exact"
+            assert record["confidence"] == 1.0
+        else:
+            assert record["kind"] == label["truth"]
+            assert label["bank_id"] in record["items"]
+            if label["gl_id"] is not None:
+                assert label["gl_id"] in record["items"]
+            if label["truth"] == "DUPLICATE":
+                assert set(label["related_gl_ids"]) == set(record["items"][1:])
 
-    duplicate_labels = [label for label in labels if label["truth"] == "DUPLICATE"]
-    assert len(duplicate_labels) == 3
-    for label in duplicate_labels:
-        decision = decisions_by_bank[str(label["bank_id"])]
-        assert decision["pair"] is None
-        assert decision["method"] == "exact"
-        assert label["gl_id"] in decision["items"]
-        assert set(label["related_gl_ids"]) == set(decision["items"][1:])
-        assert (
-            "multiple equally valid exact GL candidates"
-            in decision["evidence"]["counterfactual"]
-        )
-        assert len(decision["evidence"]["candidate_rows"]) == 2
 
-    labeled_bank_ids = {str(label["bank_id"]) for label in labels}
-    labeled_gl_ids = {
-        str(gl_id)
-        for label in labels
-        for gl_id in (
-            label.get("related_gl_ids")
-            or ([label["gl_id"]] if label["gl_id"] is not None else [])
-        )
-    }
-    assert labeled_bank_ids == {str(item["id"]) for item in bank}
-    assert labeled_gl_ids == {str(item["id"]) for item in gl}
+def test_all_outputs_have_evidence_and_at_least_61_exact_matches() -> None:
+    bank, gl = ingest_pair(
+        ROOT / "data" / "sample" / "bank.csv",
+        ROOT / "data" / "sample" / "gl.csv",
+    )
+    records = match_transactions(bank, gl, load_policy())
+
+    assert sum(record.get("method") == "exact" for record in records) >= 61
+    assert all(record.get("evidence") for record in records)

@@ -1,8 +1,11 @@
 from io import StringIO
+from pathlib import Path
 
 import pytest
 
 from backend.app.ingest import IngestError, ingest_csv, ingest_pair
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_ingest_canonicalizes_aliases_and_preserves_raw_row() -> None:
@@ -64,3 +67,17 @@ def test_ingest_rejects_duplicate_source_ids() -> None:
             "gl",
             StringIO("id,date,amount\nGL-1,2026-08-31,1\nGL-1,2026-08-31,2\n"),
         )
+
+
+def test_committed_samples_load_without_dropped_rows() -> None:
+    bank, gl = ingest_pair(
+        ROOT / "data" / "sample" / "bank.csv",
+        ROOT / "data" / "sample" / "gl.csv",
+    )
+
+    assert len(bank) == 79
+    assert len(gl) == 79
+    assert len({row["id"] for row in bank}) == len(bank)
+    assert len({row["id"] for row in gl}) == len(gl)
+    assert all(isinstance(row["amount"], float) for row in [*bank, *gl])
+    assert all(row["raw"] for row in [*bank, *gl])
