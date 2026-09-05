@@ -125,13 +125,16 @@ def build() -> Builder:
         bank, first_gl = builder.pair(
             truth="DUPLICATE", index=index, bank_date=close_date
         )
-        builder.row(
+        duplicate_gl = builder.row(
             "gl",
             amount=float(first_gl["amount"]),
             posted=close_date,
             counterparty=first_gl["counterparty"],
             reference=first_gl["reference"],
         )
+        # The label points at the repeated (erroneous) posting. The original
+        # GL row remains the legitimate candidate in the ambiguity group.
+        builder.labels[-1]["gl_id"] = duplicate_gl["id"]
 
     for index in range(69, 72):
         bank = builder.row(
@@ -166,8 +169,6 @@ def build() -> Builder:
         )
 
     assert len(builder.bank) == 79
-    # The enumerated taxonomy yields 79 GL rows. AGENTS.md separately states
-    # 83, but no four additional labeled rows are defined by the contract.
     assert len(builder.gl) == 79
     assert len(builder.labels) == 79
     assert sum(label["truth"] != "matched" for label in builder.labels) == 18

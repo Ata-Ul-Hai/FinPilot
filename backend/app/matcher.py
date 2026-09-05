@@ -201,6 +201,45 @@ def _decision(
     }
 
 
+def _ambiguity_decision(
+    bank: Transaction,
+    gl_candidates: Sequence[Transaction],
+    policy: MatchPolicy,
+    method: str,
+) -> dict[str, object]:
+    candidate_ids = [str(candidate["id"]) for candidate in gl_candidates]
+    scores = _field_scores(bank, gl_candidates[0], policy)
+    candidate_count = len(gl_candidates)
+    qualifier = "equally valid exact" if method == "exact" else f"qualifying {method}"
+    return {
+        "pair": None,
+        "items": [str(bank["id"]), *candidate_ids],
+        "status": "exception",
+        "method": method,
+        "confidence": _confidence(scores),
+        "evidence": {
+            "field_scores": scores,
+            "reasons": [
+                f"multiple {qualifier} GL candidates ({candidate_count})",
+                f"candidate IDs: {', '.join(candidate_ids)}",
+            ],
+            "counterfactual": (
+                f"not auto-matched because multiple {qualifier} GL candidates "
+                f"({candidate_count}) create an ambiguity that requires review"
+            ),
+            "source_rows": {"bank": bank.get("raw", {})},
+            "candidate_rows": [
+                {
+                    "id": str(candidate["id"]),
+                    "source": "gl",
+                    "raw": candidate.get("raw", {}),
+                }
+                for candidate in gl_candidates
+            ],
+        },
+    }
+
+
 def match_transactions(
     bank_transactions: Sequence[Transaction],
     gl_transactions: Sequence[Transaction],
@@ -220,6 +259,7 @@ def match_transactions(
     remaining_bank = {str(item["id"]): item for item in banks}
     remaining_gl = {str(item["id"]): item for item in gls}
     decisions: list[dict[str, object]] = []
+    ambiguities: dict[str, tuple[str, list[str]]] = {}
 
     def run_pass(method: str) -> None:
         candidates: list[tuple[float, str, str, Transaction, Transaction]] = []
@@ -240,6 +280,17 @@ def match_transactions(
         for _, bank_id, gl_id, _, _ in candidates:
             bank_candidate_counts[bank_id] = bank_candidate_counts.get(bank_id, 0) + 1
             gl_candidate_counts[gl_id] = gl_candidate_counts.get(gl_id, 0) + 1
+        for bank_id, candidate_count in bank_candidate_counts.items():
+            if candidate_count <= 1 or bank_id in ambiguities:
+                continue
+            ambiguities[bank_id] = (
+                method,
+                sorted(
+                    gl_id
+                    for _, candidate_bank_id, gl_id, _, _ in candidates
+                    if candidate_bank_id == bank_id
+                ),
+            )
         for _, bank_id, gl_id, bank, gl in sorted(
             candidates, key=lambda item: (-item[0], item[1], item[2])
         ):
@@ -255,6 +306,27 @@ def match_transactions(
 
     for pass_name in ("exact", "rule", "fuzzy"):
         run_pass(pass_name)
+
+    # Resolve ambiguous groups before generic review-candidate pairing so the
+    # reason they were withheld survives into the evidence pack.
+    for bank_id, (method, candidate_ids) in sorted(ambiguities.items()):
+        if bank_id not in remaining_bank:
+            continue
+        available_candidates = [
+            remaining_gl[candidate_id]
+            for candidate_id in candidate_ids
+            if candidate_id in remaining_gl
+        ]
+        if len(available_candidates) <= 1:
+            continue
+        decisions.append(
+            _ambiguity_decision(
+                remaining_bank[bank_id], available_candidates, active_policy, method
+            )
+        )
+        del remaining_bank[bank_id]
+        for candidate in available_candidates:
+            del remaining_gl[str(candidate["id"])]
 
     candidate_pairs: list[tuple[float, str, str, Transaction, Transaction]] = []
     for bank_id, bank in remaining_bank.items():

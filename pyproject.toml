@@ -11,8 +11,9 @@ dependencies = [
   "rapidfuzz>=3.9,<4",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
+  "jsonschema>=4.23,<5",
   "pytest>=8.2,<9",
 ]
 

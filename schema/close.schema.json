@@ -2,34 +2,67 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://close-copilot.local/schema/close.schema.json",
   "title": "Close Copilot contract",
+  "oneOf": [
+    {"$ref": "#/$defs/transaction"},
+    {"$ref": "#/$defs/matchDecision"},
+    {"$ref": "#/$defs/exception"},
+    {"$ref": "#/$defs/policy"},
+    {"$ref": "#/$defs/closeRun"}
+  ],
   "$defs": {
     "transaction": {
       "type": "object",
       "required": ["id", "source", "date", "amount", "currency", "counterparty", "reference", "raw"],
       "properties": {
-        "id": {"type": "string"},
+        "id": {"type": "string", "minLength": 1},
         "source": {"enum": ["bank", "gl"]},
         "date": {"type": "string", "format": "date"},
         "amount": {"type": "number"},
-        "currency": {"type": "string"},
+        "currency": {"type": "string", "minLength": 3, "maxLength": 3},
         "counterparty": {"type": "string"},
         "reference": {"type": "string"},
         "raw": {"type": "object"}
       },
       "additionalProperties": false
     },
+    "fieldScores": {
+      "type": "object",
+      "required": ["amount", "date_proximity", "counterparty", "reference"],
+      "properties": {
+        "amount": {"type": "number", "minimum": 0, "maximum": 1},
+        "date_proximity": {"type": "number", "minimum": 0, "maximum": 1},
+        "counterparty": {"type": "number", "minimum": 0, "maximum": 1},
+        "reference": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    },
+    "candidateRow": {
+      "type": "object",
+      "required": ["id", "source", "raw"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "source": {"enum": ["bank", "gl"]},
+        "raw": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
     "evidence": {
       "type": "object",
-      "required": ["field_scores", "reasons", "counterfactual"],
+      "required": ["field_scores", "reasons", "counterfactual", "source_rows"],
       "properties": {
-        "field_scores": {
-          "type": "object",
-          "required": ["amount", "date_proximity", "counterparty", "reference"],
-          "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}
+        "field_scores": {"$ref": "#/$defs/fieldScores"},
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
         },
-        "reasons": {"type": "array", "items": {"type": "string"}},
-        "counterfactual": {"type": "string"},
-        "source_rows": {"type": "object"}
+        "counterfactual": {"type": "string", "minLength": 1},
+        "source_rows": {"type": "object", "minProperties": 1},
+        "candidate_rows": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/candidateRow"}
+        }
       },
       "additionalProperties": false
     },
@@ -39,15 +72,168 @@
       "properties": {
         "pair": {
           "oneOf": [
-            {"type": "array", "prefixItems": [{"type": "string"}, {"type": "string"}], "minItems": 2, "maxItems": 2},
+            {
+              "type": "array",
+              "prefixItems": [{"type": "string"}, {"type": "string"}],
+              "minItems": 2,
+              "maxItems": 2
+            },
             {"type": "null"}
           ]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string"}
         },
         "status": {"enum": ["matched", "exception"]},
         "method": {"enum": ["exact", "rule", "fuzzy", "llm"]},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "items": {"type": "array", "items": {"type": "string"}},
         "evidence": {"$ref": "#/$defs/evidence"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"pair": {"type": "null"}}},
+          "then": {"required": ["items"]}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "exceptionKind": {
+      "enum": [
+        "TIMING_DIFF",
+        "DUPLICATE",
+        "MISSING_ENTRY",
+        "AMOUNT_MISMATCH",
+        "COUNTERPARTY_MISMATCH",
+        "UNKNOWN"
+      ]
+    },
+    "exception": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "primary_kind",
+        "secondary_tags",
+        "items",
+        "disposition",
+        "suggestion",
+        "confidence",
+        "evidence"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"$ref": "#/$defs/exceptionKind"},
+        "primary_kind": {"$ref": "#/$defs/exceptionKind"},
+        "secondary_tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "disposition": {"enum": ["auto_resolved", "needs_review", "escalated"]},
+        "suggestion": {"type": "string", "minLength": 1},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "evidence": {"$ref": "#/$defs/evidence"}
+      },
+      "additionalProperties": false
+    },
+    "policyRule": {
+      "type": "object",
+      "required": ["fuzzy_threshold", "amount_tolerance", "date_grace_days"],
+      "properties": {
+        "fuzzy_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+        "amount_tolerance": {"type": "number", "minimum": 0},
+        "date_grace_days": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "numericDelta": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "policy": {
+      "type": "object",
+      "required": ["id", "version", "rule", "created_by", "diff_vs_previous", "eval_impact"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "version": {"type": "integer", "minimum": 1},
+        "rule": {"$ref": "#/$defs/policyRule"},
+        "created_by": {"type": "string", "minLength": 1},
+        "diff_vs_previous": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/numericDelta"}
+        },
+        "eval_impact": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/numericDelta"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "closeCounts": {
+      "type": "object",
+      "required": ["bank", "gl", "matched", "exceptions", "auto_resolved", "in_inbox"],
+      "properties": {
+        "bank": {"type": "integer", "minimum": 0},
+        "gl": {"type": "integer", "minimum": 0},
+        "matched": {"type": "integer", "minimum": 0},
+        "exceptions": {"type": "integer", "minimum": 0},
+        "auto_resolved": {"type": "integer", "minimum": 0},
+        "in_inbox": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "checklistItem": {
+      "type": "object",
+      "required": ["task", "status"],
+      "properties": {
+        "task": {"type": "string", "minLength": 1},
+        "status": {"enum": ["done", "in_review", "open"]}
+      },
+      "additionalProperties": false
+    },
+    "journalEntryDraft": {
+      "type": "object",
+      "required": ["for", "entry"],
+      "properties": {
+        "for": {"type": "string", "minLength": 1},
+        "entry": {
+          "type": "object",
+          "required": ["dr", "cr", "amount"],
+          "properties": {
+            "dr": {"type": "string", "minLength": 1},
+            "cr": {"type": "string", "minLength": 1},
+            "amount": {"type": "number", "exclusiveMinimum": 0}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "closeRun": {
+      "type": "object",
+      "required": ["run_id", "counts", "checklist", "je_drafts"],
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1},
+        "counts": {"$ref": "#/$defs/closeCounts"},
+        "checklist": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/checklistItem"}
+        },
+        "je_drafts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/journalEntryDraft"}
+        }
       },
       "additionalProperties": false
     }

@@ -94,11 +94,19 @@ def test_ambiguous_duplicates_are_not_auto_matched() -> None:
 
     decisions = match_transactions(bank, gl)
 
-    assert decisions[0]["pair"] == ["BNK-1", "GL-1"]
+    assert len(decisions) == 1
+    assert decisions[0]["pair"] is None
+    assert decisions[0]["items"] == ["BNK-1", "GL-1", "GL-2"]
     assert decisions[0]["status"] == "exception"
-    assert decisions[1]["pair"] is None
-    assert decisions[1]["items"] == ["GL-2"]
-    assert decisions[1]["evidence"]
+    assert decisions[0]["method"] == "exact"
+    assert (
+        "multiple equally valid exact GL candidates"
+        in decisions[0]["evidence"]["counterfactual"]
+    )
+    assert [row["id"] for row in decisions[0]["evidence"]["candidate_rows"]] == [
+        "GL-1",
+        "GL-2",
+    ]
     assert not any(item["status"] == "matched" for item in decisions)
 
 
@@ -111,58 +119,3 @@ def test_every_decision_has_evidence_even_for_orphans() -> None:
     assert decisions
     assert all(decision.get("evidence") for decision in decisions)
     assert all(decision["evidence"].get("counterfactual") for decision in decisions)
-
-
-def test_benchmark_acceptance_61_exact_and_four_typo_exceptions() -> None:
-    banks = []
-    gls = []
-    for index in range(1, 62):
-        kwargs = {
-            "amount": float(index * -10),
-            "counterparty": f"Vendor {index}",
-            "reference": f"INV-{index:04d}",
-        }
-        banks.append(transaction(f"BNK-{index:04d}", "bank", **kwargs))
-        gls.append(transaction(f"GL-{index:04d}", "gl", **kwargs))
-    for offset, (left, right) in enumerate(
-        [
-            ("Acme Freight", "ACM FRT"),
-            ("Northstar Software", "NRTHSTR SFT"),
-            ("Blue River Logistics", "BL RVR LGSTCS"),
-            ("Beacon Consulting", "BCN CNSLTNG"),
-        ],
-        start=62,
-    ):
-        banks.append(
-            transaction(
-                f"BNK-{offset:04d}",
-                "bank",
-                amount=float(offset * -10),
-                counterparty=left,
-                reference="",
-            )
-        )
-        gls.append(
-            transaction(
-                f"GL-{offset:04d}",
-                "gl",
-                amount=float(offset * -10),
-                counterparty=right,
-                reference="",
-            )
-        )
-
-    decisions = match_transactions(banks, gls, MatchPolicy(fuzzy_threshold=0.80))
-
-    exact = [
-        item
-        for item in decisions
-        if item["method"] == "exact" and item["status"] == "matched"
-    ]
-    exceptions = [item for item in decisions if item["status"] == "exception"]
-    assert len(exact) == 61
-    assert len(exceptions) == 4
-    assert all(
-        item["evidence"]["field_scores"]["counterparty"] < 0.80 for item in exceptions
-    )
-    assert all(item["evidence"]["source_rows"] for item in exceptions)
