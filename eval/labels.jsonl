@@ -63,9 +63,9 @@
 {"bank_id": "BNK-0063", "gl_id": "GL-0063", "truth": "TIMING_DIFF"}
 {"bank_id": "BNK-0064", "gl_id": "GL-0064", "truth": "TIMING_DIFF"}
 {"bank_id": "BNK-0065", "gl_id": "GL-0065", "truth": "TIMING_DIFF"}
-{"bank_id": "BNK-0066", "gl_id": "GL-0067", "truth": "DUPLICATE"}
-{"bank_id": "BNK-0067", "gl_id": "GL-0069", "truth": "DUPLICATE"}
-{"bank_id": "BNK-0068", "gl_id": "GL-0071", "truth": "DUPLICATE"}
+{"bank_id": "BNK-0066", "gl_id": "GL-0067", "related_gl_ids": ["GL-0066", "GL-0067"], "truth": "DUPLICATE"}
+{"bank_id": "BNK-0067", "gl_id": "GL-0069", "related_gl_ids": ["GL-0068", "GL-0069"], "truth": "DUPLICATE"}
+{"bank_id": "BNK-0068", "gl_id": "GL-0071", "related_gl_ids": ["GL-0070", "GL-0071"], "truth": "DUPLICATE"}
 {"bank_id": "BNK-0069", "gl_id": null, "truth": "MISSING_ENTRY"}
 {"bank_id": "BNK-0070", "gl_id": null, "truth": "MISSING_ENTRY"}
 {"bank_id": "BNK-0071", "gl_id": null, "truth": "MISSING_ENTRY"}

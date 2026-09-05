@@ -19,6 +19,7 @@ def test_public_contract_defines_every_section_four_shape() -> None:
         "exception",
         "policy",
         "closeRun",
+        "groundTruthLabel",
     } <= schema["$defs"].keys()
 
 
@@ -31,8 +32,12 @@ def test_sample_transactions_and_decisions_satisfy_contract() -> None:
     )
 
     decisions = match_transactions(bank, gl)
+    labels = [
+        json.loads(line)
+        for line in (ROOT / "eval" / "labels.jsonl").read_text().splitlines()
+    ]
 
-    for record in [*bank, *gl, *decisions]:
+    for record in [*bank, *gl, *decisions, *labels]:
         validator.validate(record)
 
 

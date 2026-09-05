@@ -162,7 +162,7 @@ All workers code against these shapes. Changing the schema requires a PR that up
 - **4 counterparty typos** — same amount/date, name corrupted ("Acme Freight" vs "ACME FRT.")
 - Totals: **79 bank tx, 79 GL rows, 18 labeled exception groups.** An earlier draft said 83 GL rows, but the enumerated taxonomy produces 79: 61 clean + 4 timing + 6 rows across 3 duplicate groups + 0 missing-entry counterparts + 4 amount mismatches + 4 counterparty typos. The taxonomy-derived 79/79 total is canonical; do not add unlabeled padding rows.
 
-`labels.jsonl` line: `{"bank_id": "BNK-0007", "gl_id": "GL-0031", "truth": "matched"|"TIMING_DIFF"|"DUPLICATE"|..., }`
+`labels.jsonl` line: `{"bank_id": "BNK-0007", "gl_id": "GL-0031"|null, "truth": "matched"|"TIMING_DIFF"|"DUPLICATE"|..., "related_gl_ids": ["GL-0030", "GL-0031"] }`. `related_gl_ids` is required only for `DUPLICATE`: `gl_id` identifies the repeated/erroneous posting while `related_gl_ids` lists every GL row in that duplicate group. This preserves one label line per bank transaction (79 lines and 18 exception groups) while making every generated GL ID traceable from frozen ground truth.
 
 **Metrics (computed by `eval.py`, displayed in EvalPanel and CI):**
 - Match precision / recall / F1

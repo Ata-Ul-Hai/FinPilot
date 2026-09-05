@@ -7,7 +7,8 @@
     {"$ref": "#/$defs/matchDecision"},
     {"$ref": "#/$defs/exception"},
     {"$ref": "#/$defs/policy"},
-    {"$ref": "#/$defs/closeRun"}
+    {"$ref": "#/$defs/closeRun"},
+    {"$ref": "#/$defs/groundTruthLabel"}
   ],
   "$defs": {
     "transaction": {
@@ -109,6 +110,46 @@
         "COUNTERPARTY_MISMATCH",
         "UNKNOWN"
       ]
+    },
+    "groundTruthLabel": {
+      "type": "object",
+      "required": ["bank_id", "gl_id", "truth"],
+      "properties": {
+        "bank_id": {"type": "string", "minLength": 1},
+        "gl_id": {
+          "oneOf": [
+            {"type": "string", "minLength": 1},
+            {"type": "null"}
+          ]
+        },
+        "truth": {
+          "oneOf": [
+            {"const": "matched"},
+            {"$ref": "#/$defs/exceptionKind"}
+          ]
+        },
+        "related_gl_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"truth": {"const": "DUPLICATE"}}},
+          "then": {
+            "required": ["related_gl_ids"],
+            "properties": {"gl_id": {"type": "string", "minLength": 1}}
+          }
+        },
+        {
+          "if": {"properties": {"truth": {"const": "MISSING_ENTRY"}}},
+          "then": {"properties": {"gl_id": {"type": "null"}}},
+          "else": {"properties": {"gl_id": {"type": "string", "minLength": 1}}}
+        }
+      ],
+      "additionalProperties": false
     },
     "exception": {
       "type": "object",

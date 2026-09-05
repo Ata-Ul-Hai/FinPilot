@@ -19,3 +19,19 @@ def test_seed_data_matches_frozen_benchmark_shape() -> None:
         "AMOUNT_MISMATCH": 4,
         "COUNTERPARTY_MISMATCH": 4,
     }
+
+
+def test_every_generated_id_is_traceable_from_ground_truth() -> None:
+    data = build()
+    labeled_bank_ids = {str(label["bank_id"]) for label in data.labels}
+    labeled_gl_ids = {
+        str(gl_id)
+        for label in data.labels
+        for gl_id in (
+            label.get("related_gl_ids")
+            or ([label["gl_id"]] if label["gl_id"] is not None else [])
+        )
+    }
+
+    assert labeled_bank_ids == {row["id"] for row in data.bank}
+    assert labeled_gl_ids == {row["id"] for row in data.gl}

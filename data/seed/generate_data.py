@@ -38,7 +38,7 @@ class Builder:
     rng: random.Random
     bank: list[dict[str, str]]
     gl: list[dict[str, str]]
-    labels: list[dict[str, str | None]]
+    labels: list[dict[str, object]]
 
     @classmethod
     def create(cls) -> Builder:
@@ -133,8 +133,13 @@ def build() -> Builder:
             reference=first_gl["reference"],
         )
         # The label points at the repeated (erroneous) posting. The original
-        # GL row remains the legitimate candidate in the ambiguity group.
+        # GL row remains the legitimate candidate in the ambiguity group, and
+        # related_gl_ids makes both generated rows traceable from ground truth.
         builder.labels[-1]["gl_id"] = duplicate_gl["id"]
+        builder.labels[-1]["related_gl_ids"] = [
+            first_gl["id"],
+            duplicate_gl["id"],
+        ]
 
     for index in range(69, 72):
         bank = builder.row(

@@ -7,7 +7,7 @@ from backend.app.matcher import MatchPolicy, match_transactions
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _labels() -> list[dict[str, str | None]]:
+def _labels() -> list[dict[str, object]]:
     with (ROOT / "eval" / "labels.jsonl").open(encoding="utf-8") as stream:
         return [json.loads(line) for line in stream]
 
@@ -68,8 +68,21 @@ def test_frozen_sample_acceptance_and_labeled_review_evidence() -> None:
         assert decision["pair"] is None
         assert decision["method"] == "exact"
         assert label["gl_id"] in decision["items"]
+        assert set(label["related_gl_ids"]) == set(decision["items"][1:])
         assert (
             "multiple equally valid exact GL candidates"
             in decision["evidence"]["counterfactual"]
         )
         assert len(decision["evidence"]["candidate_rows"]) == 2
+
+    labeled_bank_ids = {str(label["bank_id"]) for label in labels}
+    labeled_gl_ids = {
+        str(gl_id)
+        for label in labels
+        for gl_id in (
+            label.get("related_gl_ids")
+            or ([label["gl_id"]] if label["gl_id"] is not None else [])
+        )
+    }
+    assert labeled_bank_ids == {str(item["id"]) for item in bank}
+    assert labeled_gl_ids == {str(item["id"]) for item in gl}
