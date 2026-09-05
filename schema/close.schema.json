@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://close-copilot.local/schema/close.schema.json",
+  "title": "Close Copilot contract",
+  "$defs": {
+    "transaction": {
+      "type": "object",
+      "required": ["id", "source", "date", "amount", "currency", "counterparty", "reference", "raw"],
+      "properties": {
+        "id": {"type": "string"},
+        "source": {"enum": ["bank", "gl"]},
+        "date": {"type": "string", "format": "date"},
+        "amount": {"type": "number"},
+        "currency": {"type": "string"},
+        "counterparty": {"type": "string"},
+        "reference": {"type": "string"},
+        "raw": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["field_scores", "reasons", "counterfactual"],
+      "properties": {
+        "field_scores": {
+          "type": "object",
+          "required": ["amount", "date_proximity", "counterparty", "reference"],
+          "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "reasons": {"type": "array", "items": {"type": "string"}},
+        "counterfactual": {"type": "string"},
+        "source_rows": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "matchDecision": {
+      "type": "object",
+      "required": ["pair", "status", "method", "confidence", "evidence"],
+      "properties": {
+        "pair": {
+          "oneOf": [
+            {"type": "array", "prefixItems": [{"type": "string"}, {"type": "string"}], "minItems": 2, "maxItems": 2},
+            {"type": "null"}
+          ]
+        },
+        "status": {"enum": ["matched", "exception"]},
+        "method": {"enum": ["exact", "rule", "fuzzy", "llm"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "items": {"type": "array", "items": {"type": "string"}},
+        "evidence": {"$ref": "#/$defs/evidence"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

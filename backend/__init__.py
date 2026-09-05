@@ -1,0 +1,1 @@
+"""Close Copilot backend package."""
