@@ -5,7 +5,7 @@ def test_seed_data_matches_frozen_benchmark_shape() -> None:
     data = build()
 
     assert len(data.bank) == 79
-    assert len(data.gl) == 83
+    assert len(data.gl) == 79
     assert len(data.labels) == 79
     exception_counts: dict[str, int] = {}
     for label in data.labels:

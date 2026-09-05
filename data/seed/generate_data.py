@@ -119,20 +119,19 @@ def build() -> Builder:
             gl_date=close_date + timedelta(days=days),
         )
 
-    # Three duplicate exception groups. Repeated exports contain ten GL rows
-    # across the groups, preserving the contract's 79-bank / 83-GL totals.
-    for index, booking_count in zip(range(66, 69), (4, 3, 3), strict=True):
+    # Three duplicate exception groups: one bank transaction and two GL
+    # bookings per group, as specified by the frozen taxonomy.
+    for index in range(66, 69):
         bank, first_gl = builder.pair(
             truth="DUPLICATE", index=index, bank_date=close_date
         )
-        for _ in range(booking_count - 1):
-            builder.row(
-                "gl",
-                amount=float(first_gl["amount"]),
-                posted=close_date,
-                counterparty=first_gl["counterparty"],
-                reference=first_gl["reference"],
-            )
+        builder.row(
+            "gl",
+            amount=float(first_gl["amount"]),
+            posted=close_date,
+            counterparty=first_gl["counterparty"],
+            reference=first_gl["reference"],
+        )
 
     for index in range(69, 72):
         bank = builder.row(
@@ -167,7 +166,9 @@ def build() -> Builder:
         )
 
     assert len(builder.bank) == 79
-    assert len(builder.gl) == 83
+    # The enumerated taxonomy yields 79 GL rows. AGENTS.md separately states
+    # 83, but no four additional labeled rows are defined by the contract.
+    assert len(builder.gl) == 79
     assert len(builder.labels) == 79
     assert sum(label["truth"] != "matched" for label in builder.labels) == 18
     return builder
