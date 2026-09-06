@@ -12,7 +12,7 @@ export type CloseApi = {
   runEvaluation(): Promise<WorkspaceSnapshot>
 }
 
-const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || (import.meta.env.DEV ? 'http://localhost:8000' : '')
+const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? ''
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, { ...init, headers: init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers } })

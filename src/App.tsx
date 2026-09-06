@@ -155,7 +155,7 @@ export default function App() {
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [toast, setToast] = useState<string | null>(null)
   const apiRef = useRef<CloseApi | null>(null)
   useEffect(() => { const listener = () => setView(viewFromHash()); window.addEventListener('hashchange', listener); return () => window.removeEventListener('hashchange', listener) }, [])
-  useEffect(() => { connectApi().then(({ api, snapshot, error: connectError }) => { apiRef.current = api; setData(snapshot); setSource(api.source); if (connectError) setError(`API unavailable (${connectError}). Using offline demo data.`) }) }, [])
+  useEffect(() => { connectApi().then(({ api, snapshot, error: connectError }) => { apiRef.current = api; setData(snapshot); setSource(api.source); if (connectError) setError('Offline demo data — backend not reachable. Start it with: uvicorn backend.app.server:app --port 8000') }) }, [])
   const navigate = (next: View) => { window.history.pushState({}, '', `#${next}`); setView(next); setMenuOpen(false) }
   const perform = async (action: (api: CloseApi) => Promise<WorkspaceSnapshot>, success?: string) => {
     if (!apiRef.current) return

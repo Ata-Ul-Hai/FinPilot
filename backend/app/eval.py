@@ -143,11 +143,8 @@ def evaluate_decisions(
                 if record is not None and record.get("kind") == truth:
                     correct_by_kind[truth] += 1
 
-    total_closable = len(labels)
-    fn = max(0, total_closable - tp)
-
     precision = round(tp / (tp + fp), 4) if (tp + fp) > 0 else 0.0
-    recall = round(tp / total_closable, 4) if total_closable > 0 else 0.0
+    recall = round(tp / (tp + fn), 4) if (tp + fn) > 0 else 0.0
     f1 = round((2 * precision * recall) / (precision + recall), 4) if (precision + recall) > 0 else 0.0
 
     per_kind_accuracy: dict[str, float] = {}

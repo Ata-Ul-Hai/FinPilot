@@ -21,9 +21,10 @@
   - **AO Dashboard:** Total session count and active worker sessions.
   - **Session 1 (`ao/finpilot-3/engine-a1` · PR #1):** Pure deterministic engine (canonical ingestion, rapidfuzz matcher, seed data generator, 24 unit tests, `schema/close.schema.json`, frozen `eval/labels.jsonl`).
   - **Session 2 (`ao/finpilot-4/ui` · PR #2):** Complete React + TypeScript dashboard with evidence drawer and trust gates.
-  - **Session 3 (`ao/finpilot-orchestrator` / `main`):** Reviewer loop, FastAPI workspace API, and GitHub Actions eval workflow.
+  - **Session 3 (Reviewer session):** Audited both engine and UI PRs, posting review findings on PR #2.
+  - **Antigravity integration pass:** Built the FastAPI workspace contract binding UI to engine and wired the GitHub Actions eval CI.
 * **Voiceover:**  
-  > *"FinPilot was constructed entirely inside Maximor's Agent Orchestrator. Using dedicated agent sessions in isolated git worktrees, Session 1 built our deterministic engine and frozen ground truth benchmark; Session 2 built our interactive React dashboard; and our orchestrator session merged the PRs, built the FastAPI contract, and wired automated CI checks. Zero manual glue code."*
+  > *"FinPilot was built as a multi-agent relay. Inside Agent Orchestrator, three sessions ran in isolated git worktrees: engine-a1 shipped the deterministic matcher with frozen ground-truth labels as PR #1; the UI session shipped this dashboard as PR #2; a reviewer session audited both with findings posted on the pull requests. The integration layer — the FastAPI contract binding UI to engine, and the eval CI — was completed in a second agentic IDE, Antigravity. Every merge was gated by GitHub Actions running our eval against frozen labels."*
 
 ---
 
@@ -49,13 +50,14 @@
   3. Test the **Bulk Approval Trust Gate**: select a duplicate (`EX-0001`) and a bank fee (`EX-0017`). Point out that the gate safely blocks the duplicate: *"Duplicates always require individual controller approval"*.
   4. Individually approve the `COUNTERPARTY_MISMATCH` exception (`EX-0012`): approve with override to relax fuzzy threshold.
   5. Click **Policies** tab: show `MATCH-01 v2` card displaying the immutable diff: `fuzzy_threshold: 0.80 → 0.60`.
-  6. Click **Evaluation** tab: show live before/after numbers:
-     - **Recall:** $\mathbf{77.2\% \longrightarrow 82.3\%}$ (**Improved**)
-     - **Inbox Size:** $\mathbf{18 \longrightarrow 14}$ (**Improved**)
-     - **False Auto-Closes:** **0** (Zero false closes preserved)
-     - **Precision:** **100.0%**
+  6. Show live before/after numbers:
+     - **Bank rows auto-matched (Close pulse):** $\mathbf{77\% \longrightarrow 82\%}$ ($61 \longrightarrow 65\text{ of }79$)
+     - **Inbox size:** $\mathbf{18 \longrightarrow 14}$
+     - **Precision (vs frozen labels):** $\mathbf{100\% \longrightarrow 100\%}$
+     - **Recall (vs frozen labels):** $\mathbf{100\% \longrightarrow 100\%}$
+     - **False auto-closes:** $\mathbf{0 \longrightarrow 0}$
 * **Voiceover:**  
-  > *"In the Review Inbox, exceptions are triaged with Maximor's triad: what we found, why we flagged it, and what we recommend. Our trust gate prevents batching errors — duplicates and high exposures are strictly quarantined for individual review. When our controller approves a counterparty typo override, Policy MATCH-01 bumps from v1 to v2 with a visible parameter diff. Immediately, our Evaluation Panel measures the delta against frozen labels: close recall jumps from 77% to 82%, inbox size drops to 14, and false auto-closes remain exactly zero."*
+  > *"In the Review Inbox, exceptions are triaged with Maximor's triad: what we found, why we flagged it, and what we recommend. Our trust gate prevents batching errors — duplicates and high exposures are strictly quarantined for individual review. When our controller approves a counterparty typo override, Policy MATCH-01 bumps from v1 to v2 with a visible parameter diff. Immediately, the close pulse climbs from 77 to 82 percent of bank rows auto-matched, the inbox drops to 14, and against frozen labels precision and recall stay pinned at 100 with zero false auto-closes."*
 
 ---
 

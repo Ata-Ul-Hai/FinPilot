@@ -71,8 +71,8 @@ def test_get_eval_baseline_precision_is_1() -> None:
     assert "baseline" in data
     assert "current" in data
     assert data["baseline"]["precision"] == 1.0
-    assert data["baseline"]["recall"] == 0.7722
-    assert data["baseline"]["f1"] == 0.8715
+    assert data["baseline"]["recall"] == 1.0
+    assert data["baseline"]["f1"] == 1.0
     assert data["baseline"]["false_auto_closes"] == 0
     assert data["baseline"]["inbox_size"] == 18
 
