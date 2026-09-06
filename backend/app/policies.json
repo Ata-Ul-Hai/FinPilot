@@ -1,0 +1,12 @@
+{
+  "created_by": "system default",
+  "diff_vs_previous": {},
+  "eval_impact": {},
+  "id": "MATCH-01",
+  "rule": {
+    "amount_tolerance": 0.0,
+    "date_grace_days": 1,
+    "fuzzy_threshold": 0.8
+  },
+  "version": 1
+}

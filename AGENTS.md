@@ -98,13 +98,19 @@ All workers code against these shapes. Changing the schema requires a PR that up
 // MatchDecision — output of matcher
 {
   "pair": ["BNK-0007", "GL-0031"] | null,
+  "items": ["BNK-0007", "GL-0031"],  // required when pair is null (for ambiguous/orphan review)
   "status": "matched | exception",
   "method": "exact | rule | fuzzy | llm",
   "confidence": 0.0,               // 0–1, from scoring fn, NOT vibes
   "evidence": {
     "field_scores": { "amount": 1.0, "date_proximity": 0.9, "counterparty": 0.62, "reference": 1.0 },
     "reasons": ["amount exact", "reference INV-4471 appears in both", "counterparty fuzzy 0.62 'Acme Freightt'~'Acme Freight'"],
-    "counterfactual": "not auto-matched because counterparty 0.62 < policy v1 threshold 0.80"
+    "counterfactual": "not auto-matched because counterparty 0.62 < policy v1 threshold 0.80",
+    "source_rows": { "bank": { "...raw bank row..." }, "gl": { "...raw GL row..." } },
+    "candidate_rows": [              // optional; two or more rows when ambiguity caused escalation
+      { "id": "GL-0031", "source": "gl", "raw": { "...raw candidate row..." } },
+      { "id": "GL-0032", "source": "gl", "raw": { "...raw candidate row..." } }
+    ]
   }
 }
 
@@ -117,7 +123,8 @@ All workers code against these shapes. Changing the schema requires a PR that up
   "items": ["BNK-0012", "GL-0051"],
   "disposition": "auto_resolved | needs_review | escalated",
   "suggestion": "write-off $0.03 under SHORT-PAY cap" ,   // what we found / why flagged / recommend
-  "confidence": 0.91
+  "confidence": 0.91,
+  "evidence": { "field_scores": { "amount": 0.97, "date_proximity": 1.0, "counterparty": 1.0, "reference": 1.0 }, "reasons": ["amount differs by $0.03"], "counterfactual": "not auto-resolved without SHORT-PAY policy coverage", "source_rows": { "bank": {}, "gl": {} } }
 }
 
 // Policy — versioned, diff-able
@@ -133,7 +140,7 @@ All workers code against these shapes. Changing the schema requires a PR that up
 // CloseRun — dashboard summary
 {
   "run_id": "close-2026-08",
-  "counts": { "bank": 79, "gl": 83, "matched": 61, "exceptions": 18, "auto_resolved": 5, "in_inbox": 13 },
+  "counts": { "bank": 79, "gl": 79, "matched": 61, "exceptions": 18, "auto_resolved": 5, "in_inbox": 13 },
   "checklist": [ {"task": "cash reconciliation", "status": "done|in_review|open"} , "..."],
   "je_drafts": [ {"for": "MISSING_ENTRY BNK-0064", "entry": {"dr": "6120 Bank fees", "cr": "1010 Cash", "amount": 38.00}} ]
 }
@@ -153,9 +160,9 @@ All workers code against these shapes. Changing the schema requires a PR that up
 - **3 missing entries** — bank tx with no GL counterpart
 - **4 amount mismatches** — pair exists, amounts differ by $0.01–5.00
 - **4 counterparty typos** — same amount/date, name corrupted ("Acme Freight" vs "ACME FRT.")
-- Totals: **79 bank tx, 83 GL rows, 18 labeled exceptions.**
+- Totals: **79 bank tx, 79 GL rows, 18 labeled exception groups.** An earlier draft said 83 GL rows, but the enumerated taxonomy produces 79: 61 clean + 4 timing + 6 rows across 3 duplicate groups + 0 missing-entry counterparts + 4 amount mismatches + 4 counterparty typos. The taxonomy-derived 79/79 total is canonical; do not add unlabeled padding rows.
 
-`labels.jsonl` line: `{"bank_id": "BNK-0007", "gl_id": "GL-0031", "truth": "matched"|"TIMING_DIFF"|"DUPLICATE"|..., }`
+`labels.jsonl` line: `{"bank_id": "BNK-0007", "gl_id": "GL-0031"|null, "truth": "matched"|"TIMING_DIFF"|"DUPLICATE"|..., "related_gl_ids": ["GL-0030", "GL-0031"] }`. `related_gl_ids` is required only for `DUPLICATE`: `gl_id` identifies the repeated/erroneous posting while `related_gl_ids` lists every GL row in that duplicate group. This preserves one label line per bank transaction (79 lines and 18 exception groups) while making every generated GL ID traceable from frozen ground truth.
 
 **Metrics (computed by `eval.py`, displayed in EvalPanel and CI):**
 - Match precision / recall / F1

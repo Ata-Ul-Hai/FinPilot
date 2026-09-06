@@ -1,7 +1,11 @@
 .env
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
 out/
 .pytest_cache/
 node_modules/
+dist/
 web/dist/
+*.tsbuildinfo
+
