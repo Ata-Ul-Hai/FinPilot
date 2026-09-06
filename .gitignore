@@ -13,5 +13,8 @@ vite.config.js
 vite.config.d.ts
 .DS_Store
 eval/metrics.json
+web/.env
+*.env.local
+
 
 
