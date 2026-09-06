@@ -1,0 +1,12 @@
+{
+  "name": "close-copilot-web-runner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev --prefix .. --",
+    "build": "npm run build --prefix ..",
+    "lint": "npm run lint --prefix ..",
+    "test": "npm test --prefix .."
+  }
+}

@@ -120,24 +120,43 @@ class CloseState:
         matched: list[dict[str, Any]] = []
         exceptions: list[dict[str, Any]] = []
 
-        # Preserve previously resolved statuses if rerun
-        existing_dispositions = {ex["id"]: ex["disposition"] for ex in self.exceptions}
-        existing_primary_kinds = {ex["id"]: ex["primary_kind"] for ex in self.exceptions if "primary_kind" in ex}
+        # Track all known exceptions across runs by bank ID
+        known_exceptions_by_bank: dict[str, dict[str, Any]] = {}
+        for ex in self.exceptions:
+            bank_id = next((i for i in ex.get("items", []) if str(i).startswith("BNK-")), None)
+            if bank_id:
+                known_exceptions_by_bank[bank_id] = ex
+
+        current_exceptions: list[dict[str, Any]] = []
+        matched_bank_ids: set[str] = set()
 
         for record in records:
             if record.get("status") == "matched":
                 matched.append(dict(record))
+                if record.get("pair"):
+                    matched_bank_ids.add(record["pair"][0])
             else:
                 ex = dict(record)
-                ex_id = ex["id"]
-                if ex_id in existing_dispositions:
-                    ex["disposition"] = existing_dispositions[ex_id]
-                if ex_id in existing_primary_kinds:
-                    ex["primary_kind"] = existing_primary_kinds[ex_id]
-                exceptions.append(ex)
+                bank_id = next((i for i in ex.get("items", []) if str(i).startswith("BNK-")), None)
+                if bank_id and bank_id in known_exceptions_by_bank:
+                    prev = known_exceptions_by_bank[bank_id]
+                    ex["id"] = prev["id"]
+                    ex["disposition"] = prev["disposition"]
+                    if "primary_kind" in prev:
+                        ex["primary_kind"] = prev["primary_kind"]
+                current_exceptions.append(ex)
 
+        # Retain resolved exceptions whose transactions are now matched under the evolved policy
+        final_exceptions = list(current_exceptions)
+        for bank_id, prev_ex in known_exceptions_by_bank.items():
+            if bank_id in matched_bank_ids:
+                resolved_ex = dict(prev_ex)
+                resolved_ex["disposition"] = "auto_resolved"
+                final_exceptions.append(resolved_ex)
+
+        final_exceptions.sort(key=lambda x: x["id"])
         self.decisions = matched
-        self.exceptions = exceptions
+        self.exceptions = final_exceptions
 
         # Compute eval
         labels = load_labels(LABELS_FILE) if LABELS_FILE.exists() else []

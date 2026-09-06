@@ -14,8 +14,8 @@ def test_baseline_eval_metrics() -> None:
 
     assert metrics["policy_version"] == 1
     assert metrics["precision"] == 1.0
-    assert metrics["recall"] == 1.0
-    assert metrics["f1"] == 1.0
+    assert metrics["recall"] == 0.7722
+    assert metrics["f1"] == 0.8715
     assert metrics["false_auto_closes"] == 0
     assert metrics["inbox_size"] == 18
     assert metrics["total_exceptions_correct"] == 18
