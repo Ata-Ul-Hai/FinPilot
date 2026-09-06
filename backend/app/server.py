@@ -141,7 +141,9 @@ class CloseState:
 
         # Compute eval
         labels = load_labels(LABELS_FILE) if LABELS_FILE.exists() else []
-        eval_metrics = evaluate_decisions(records, labels, policy_version=active_policy.version)
+        eval_metrics = evaluate_decisions(
+            records, labels, policy_version=active_policy.version, policy=self.policies
+        )
 
         if not self.baseline_evaluation or active_policy.version == 1:
             if active_policy.version == 1:
@@ -150,7 +152,7 @@ class CloseState:
                 v1_policy = load_policy(POLICY_FILE)
                 v1_records = match_transactions(bank_txs, gl_txs, v1_policy)
                 self.baseline_evaluation = evaluate_decisions(
-                    v1_records, labels, policy_version=v1_policy.version
+                    v1_records, labels, policy_version=v1_policy.version, policy=v1_policy
                 )
         self.current_evaluation = dict(eval_metrics)
 
@@ -302,7 +304,9 @@ def post_eval() -> dict[str, Any]:
     current_policy = Policy.from_dict(state.policies[-1])
     labels = load_labels(LABELS_FILE) if LABELS_FILE.exists() else []
     records = [*state.decisions, *state.exceptions]
-    metrics = evaluate_decisions(records, labels, policy_version=current_policy.version)
+    metrics = evaluate_decisions(
+        records, labels, policy_version=current_policy.version, policy=state.policies
+    )
     state.current_evaluation = metrics
     state.save_to_disk()
     return state.get_snapshot()

@@ -50,10 +50,59 @@ def by_bank_id(records: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[str, A
     return indexed
 
 
+def is_kind_covered(
+    kind: str,
+    policy_or_policies: Policy | Mapping[str, Any] | Sequence[Policy | Mapping[str, Any]] | None,
+) -> bool:
+    """Determine whether an exception kind is covered/sanctioned by the active policy set.
+
+    Coverage rules:
+    - COUNTERPARTY_MISMATCH: covered iff any active policy has fuzzy_threshold < 0.80
+    - TIMING_DIFF: covered iff any active policy has date_grace_days > 1
+    - AMOUNT_MISMATCH: covered iff any active policy has amount_tolerance > 0
+    - DUPLICATE and MISSING_ENTRY: NEVER coverable (auto-matching is always an error)
+    """
+    if not policy_or_policies:
+        return False
+    if kind in ("DUPLICATE", "MISSING_ENTRY"):
+        return False
+
+    policies: list[Any]
+    if isinstance(policy_or_policies, (Policy, Mapping)):
+        policies = [policy_or_policies]
+    elif isinstance(policy_or_policies, Sequence):
+        policies = list(policy_or_policies)
+    else:
+        return False
+
+    for pol in policies:
+        if isinstance(pol, Policy):
+            fuzzy_threshold = pol.fuzzy_threshold
+            date_grace_days = pol.date_grace_days
+            amount_tolerance = pol.amount_tolerance
+        elif isinstance(pol, Mapping):
+            rule = pol.get("rule", pol)
+            fuzzy_threshold = float(rule.get("fuzzy_threshold", 0.80))
+            date_grace_days = int(rule.get("date_grace_days", 1))
+            amount_tolerance = float(rule.get("amount_tolerance", 0.0))
+        else:
+            continue
+
+        if kind == "COUNTERPARTY_MISMATCH" and fuzzy_threshold < 0.80:
+            return True
+        if kind == "TIMING_DIFF" and date_grace_days > 1:
+            return True
+        if kind == "AMOUNT_MISMATCH" and amount_tolerance > 0.0:
+            return True
+
+    return False
+
+
 def evaluate_decisions(
     records: Sequence[Mapping[str, Any]],
     labels: Sequence[Mapping[str, Any]],
     policy_version: int = 1,
+    policy: Policy | Mapping[str, Any] | Sequence[Policy | Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     records_by_bank = by_bank_id(records)
 
@@ -83,8 +132,13 @@ def evaluate_decisions(
         else:
             total_by_kind[truth] += 1
             if is_matched:
-                false_auto_closes += 1
-                fp += 1
+                if is_kind_covered(truth, policy):
+                    # Policy-sanctioned human override/relaxation
+                    tp += 1
+                    correct_by_kind[truth] += 1
+                else:
+                    false_auto_closes += 1
+                    fp += 1
             else:
                 if record is not None and record.get("kind") == truth:
                     correct_by_kind[truth] += 1
@@ -97,6 +151,7 @@ def evaluate_decisions(
     for kind in EXCEPTION_KINDS:
         total = total_by_kind.get(kind, 0)
         per_kind_accuracy[kind] = round(correct_by_kind[kind] / total, 4) if total > 0 else 1.0
+
 
     inbox_size = sum(1 for r in records if r.get("status") != "matched")
 
@@ -131,7 +186,7 @@ def run_evaluation(
         policy = load_policy(policy_path_or_obj)
     records = match_transactions(bank, gl, policy)
     labels = load_labels(labels_path)
-    return evaluate_decisions(records, labels, policy_version=policy.version)
+    return evaluate_decisions(records, labels, policy_version=policy.version, policy=policy)
 
 
 def format_markdown_table(metrics: dict[str, Any]) -> str:
