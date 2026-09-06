@@ -12,4 +12,6 @@ web/dist/
 vite.config.js
 vite.config.d.ts
 .DS_Store
+eval/metrics.json
+
 
