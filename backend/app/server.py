@@ -17,7 +17,7 @@ from backend.app.eval import evaluate_decisions, load_labels, run_evaluation
 from backend.app.ingest import ingest_pair
 from backend.app.matcher import match_transactions
 from backend.app.narrate import draft_journal_entry, generate_commentary
-from backend.app.policies import Policy, load_policy, save_policy
+from backend.app.policies import Policy, load_policy
 from backend.app.triage import DEFAULT_REVIEW_RULES, bulk_approval_gate
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -144,7 +144,14 @@ class CloseState:
         eval_metrics = evaluate_decisions(records, labels, policy_version=active_policy.version)
 
         if not self.baseline_evaluation or active_policy.version == 1:
-            self.baseline_evaluation = dict(eval_metrics)
+            if active_policy.version == 1:
+                self.baseline_evaluation = dict(eval_metrics)
+            else:
+                v1_policy = load_policy(POLICY_FILE)
+                v1_records = match_transactions(bank_txs, gl_txs, v1_policy)
+                self.baseline_evaluation = evaluate_decisions(
+                    v1_records, labels, policy_version=v1_policy.version
+                )
         self.current_evaluation = dict(eval_metrics)
 
         # Update latest policy eval impact
@@ -388,7 +395,6 @@ def post_review(body: ReviewRequest) -> dict[str, Any]:
             eval_impact={},
         )
         state.policies.append(new_policy.to_dict())
-        save_policy(new_policy, POLICY_FILE)
         # Re-run reconciliation to update matches under new policy
         state.run_reconciliation(save=True)
     else:
