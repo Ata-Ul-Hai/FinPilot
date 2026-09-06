@@ -1,6 +1,7 @@
 .env
 .venv/
 __pycache__/
+*.pyc
 *.py[cod]
 out/
 .pytest_cache/
@@ -8,4 +9,7 @@ node_modules/
 dist/
 web/dist/
 *.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+.DS_Store
 
