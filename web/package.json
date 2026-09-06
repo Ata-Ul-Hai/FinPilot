@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run dev --prefix .. --",
+    "backend": "npm run backend --prefix ..",
     "build": "npm run build --prefix ..",
     "lint": "npm run lint --prefix ..",
     "test": "npm test --prefix .."

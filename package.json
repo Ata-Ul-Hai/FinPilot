@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "backend": ".venv/bin/uvicorn backend.app.server:app --port 8000",
     "build": "tsc -b && vite build",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run"
