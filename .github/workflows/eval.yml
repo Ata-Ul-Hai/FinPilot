@@ -1,0 +1,35 @@
+name: eval
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test-and-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Unit tests
+        run: |
+          if [ -d backend/tests ] && [ -n "$(ls backend/tests 2>/dev/null)" ]; then
+            python -m pytest backend/tests -q
+          else
+            echo "No tests yet — workers add them in Task A1."
+          fi
+      - name: Regenerate seed data (deterministic, seed=42)
+        run: python data/seed/generate_data.py
+      - name: Eval — matcher decisions vs frozen labels
+        run: |
+          if [ -f backend/app/eval.py ]; then
+            python -m backend.app.eval --labels eval/labels.jsonl --out eval/metrics.json
+            echo "### Eval metrics" >> $GITHUB_STEP_SUMMARY
+            cat eval/metrics.json >> $GITHUB_STEP_SUMMARY
+          else
+            echo "eval.py not implemented yet — arrives in Task A3."
+          fi
